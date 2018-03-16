@@ -15,11 +15,13 @@ namespace WindowsLayoutSnapshot {
 
     public partial class TrayIconForm : Form {
 
-        private Timer m_snapshotTimer = new Timer();
+        //private Timer m_snapshotTimer = new Timer();
         private List<Snapshot> m_snapshots = new List<Snapshot>();
-        private Snapshot m_menuShownSnapshot = null;
+		private List<Snapshot> fixed_snapshots = new List<Snapshot>();
+		private Snapshot m_menuShownSnapshot = null;
         private Padding? m_originalTrayMenuArrowPadding = null;
         private Padding? m_originalTrayMenuTextPadding = null;
+		private static readonly string fPath = "C:\\Temp\\layout.snapshot";
 
         internal static ContextMenuStrip me { get; set; }
 
@@ -27,31 +29,84 @@ namespace WindowsLayoutSnapshot {
             InitializeComponent();
             Visible = false;
 
-            m_snapshotTimer.Interval = (int)TimeSpan.FromMinutes(30).TotalMilliseconds;
-            m_snapshotTimer.Tick += snapshotTimer_Tick;
-            m_snapshotTimer.Enabled = true;
+           // m_snapshotTimer.Interval = (int)TimeSpan.FromMinutes(30).TotalMilliseconds;
+           // m_snapshotTimer.Tick += snapshotTimer_Tick;
+           // m_snapshotTimer.Enabled = true;
 
             me = trayMenu;
 
-            TakeSnapshot(false);
-        }
+			//TakeSnapshot(false);
+			try
+			{
+				string s = System.IO.File.ReadAllText(fPath).TrimEnd();
+				string[] sSplit = s.Split(new string[] { "\r\n" }, StringSplitOptions.None);
+
+				foreach (var sTemp in sSplit)
+				{
+					Snapshot l_snapshot = Snapshot.LoadSnapshot(sTemp);
+					fixed_snapshots.Add(l_snapshot);
+				}
+
+				UpdateRestoreChoicesInMenu();
+			}
+			catch (Exception e)
+			{
+				Console.WriteLine(e.ToString());
+			}
+		}
 
         private void snapshotTimer_Tick(object sender, EventArgs e) {
             TakeSnapshot(false);
         }
 
         private void snapshotToolStripMenuItem_Click(object sender, EventArgs e) {
-            TakeSnapshot(true);
+			if (sender.ToString().Equals("Take Snapshot"))
+			{
+				TakeSnapshot(true);
+			}
+			else
+			{
+				TakeSnapshot(sender.ToString());
+			}
+
         }
 
         private void TakeSnapshot(bool userInitiated) {
-            m_snapshots.Add(Snapshot.TakeSnapshot(userInitiated));
-            UpdateRestoreChoicesInMenu();
-        }
+			Snapshot s1 = Snapshot.TakeSnapshot(userInitiated);
+			
+			m_snapshots.Add(s1);
+			UpdateRestoreChoicesInMenu();
+		}
+		private void TakeSnapshot(string name)
+		{
+			Snapshot s1 = Snapshot.TakeSnapshot(name);
+			StringBuilder sb = new StringBuilder();
 
-        private void clearSnapshotsToolStripMenuItem_Click(object sender, EventArgs e) {
+			for (int i = 0; i < fixed_snapshots.Count; i++)
+			{
+				if (fixed_snapshots[i].Name != null && fixed_snapshots[i].Name.Equals(name))
+				{
+					fixed_snapshots.RemoveAt(i);
+					i--;
+				}
+				else
+				{
+					sb.AppendLine(fixed_snapshots[i].ConvertToString());
+				}
+			}
+			fixed_snapshots.Add(s1);
+			sb.AppendLine(s1.ConvertToString());
+		
+			System.IO.File.WriteAllText(fPath, sb.ToString());
+			UpdateRestoreChoicesInMenu();
+		}
+
+		private void clearSnapshotsToolStripMenuItem_Click(object sender, EventArgs e) {
             m_snapshots.Clear();
-            UpdateRestoreChoicesInMenu();
+			fixed_snapshots.Clear();
+
+			System.IO.File.WriteAllText(fPath, "");
+			UpdateRestoreChoicesInMenu();
         }
 
         private void justNowToolStripMenuItem_Click(object sender, EventArgs e) {
@@ -99,11 +154,12 @@ namespace WindowsLayoutSnapshot {
         }
 
         private void UpdateRestoreChoicesInMenu() {
-            // construct the new list of menu items, then populate them
-            // this function is idempotent
+			// construct the new list of menu items, then populate them
+			// this function is idempotent
 
-            var snapshotsOldestFirst = new List<Snapshot>(CondenseSnapshots(m_snapshots, 20));
-            var newMenuItems = new List<ToolStripItem>();
+			var snapshotsOldestFirst = new List<Snapshot>(fixed_snapshots);
+			snapshotsOldestFirst.AddRange(CondenseSnapshots(m_snapshots, 20));
+			var newMenuItems = new List<ToolStripItem>();
 
             newMenuItems.Add(quitToolStripMenuItem);
             newMenuItems.Add(snapshotListEndLine);
@@ -123,7 +179,9 @@ namespace WindowsLayoutSnapshot {
             }
 
             foreach (var snapshot in snapshotsOldestFirst) {
-                var menuItem = new RightImageToolStripMenuItem(snapshot.TimeTaken.ToLocalTime().ToString("MMM dd, h:mm tt"));
+				string menuName = snapshot.Name == null ? snapshot.TimeTaken.ToLocalTime().ToString("MMM dd, h:mm tt") : snapshot.Name;
+
+				var menuItem = new RightImageToolStripMenuItem(menuName);
                 menuItem.Tag = snapshot;
                 menuItem.Click += snapshot.Restore;
                 menuItem.MouseEnter += SnapshotMousedOver;
@@ -209,7 +267,8 @@ namespace WindowsLayoutSnapshot {
             // remove automatically-taken snapshots > 3 days old, or manual snapshots > 5 days old
             var y = new List<Snapshot>();
             y.AddRange(snapshots);
-            while (y.Count > maxNumSnapshots) {
+			
+			while (y.Count > maxNumSnapshots) {
                 for (int i = 0; i < y.Count; i++) {
                     if (y[i].Age > TimeSpan.FromDays(y[i].UserInitiated ? 5 : 3)) {
                         y.RemoveAt(i);
@@ -224,6 +283,7 @@ namespace WindowsLayoutSnapshot {
                 int ixMostAdjacentNeighbors = -1;
                 TimeSpan lowestDistanceBetweenNeighbors = TimeSpan.MaxValue;
                 for (int i = 1; i < y.Count - 1; i++) {
+					
                     var distanceBetweenNeighbors = (y[i + 1].TimeTaken - y[i - 1].TimeTaken).Duration();
 
                     if (y[i].UserInitiated) {
@@ -242,8 +302,8 @@ namespace WindowsLayoutSnapshot {
                 }
                 y.RemoveAt(ixMostAdjacentNeighbors);
             }
-
-            return y;
+			
+			return y;
         }
 
         private void SnapshotMousedOver(object sender, EventArgs e) {

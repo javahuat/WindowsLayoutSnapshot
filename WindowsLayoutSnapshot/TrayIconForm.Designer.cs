@@ -93,7 +93,23 @@
             this.snapshotToolStripMenuItem.Name = "snapshotToolStripMenuItem";
             this.snapshotToolStripMenuItem.Size = new System.Drawing.Size(158, 22);
             this.snapshotToolStripMenuItem.Text = "Take Snapshot";
-            this.snapshotToolStripMenuItem.Click += new System.EventHandler(this.snapshotToolStripMenuItem_Click);
+
+			System.Windows.Forms.ToolStripMenuItem t1 = new System.Windows.Forms.ToolStripMenuItem() { Name = "Office", Text = "Office" };
+			System.Windows.Forms.ToolStripMenuItem t2 = new System.Windows.Forms.ToolStripMenuItem() { Name = "Laptop", Text = "Laptop" };
+			System.Windows.Forms.ToolStripMenuItem t3 = new System.Windows.Forms.ToolStripMenuItem() { Name = "Home", Text = "Home" };
+			System.Windows.Forms.ToolStripMenuItem t4 = new System.Windows.Forms.ToolStripMenuItem() { Name = "Others", Text = "Others" };
+
+			this.snapshotToolStripMenuItem.DropDownItems.Add(t1);
+			this.snapshotToolStripMenuItem.DropDownItems.Add(t2);
+			this.snapshotToolStripMenuItem.DropDownItems.Add(t3);
+			this.snapshotToolStripMenuItem.DropDownItems.Add(t4);
+
+			t1.Click += new System.EventHandler(this.snapshotToolStripMenuItem_Click);
+			t2.Click += new System.EventHandler(this.snapshotToolStripMenuItem_Click);
+			t3.Click += new System.EventHandler(this.snapshotToolStripMenuItem_Click);
+			t4.Click += new System.EventHandler(this.snapshotToolStripMenuItem_Click);
+
+			this.snapshotToolStripMenuItem.Click += new System.EventHandler(this.snapshotToolStripMenuItem_Click);
             // 
             // TrayIconForm
             // 

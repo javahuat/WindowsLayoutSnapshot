@@ -11,27 +11,143 @@ namespace WindowsLayoutSnapshot {
     internal class Snapshot {
 
         private Dictionary<IntPtr, WINDOWPLACEMENT> m_placements = new Dictionary<IntPtr, WINDOWPLACEMENT>();
-        private List<IntPtr> m_windowsBackToTop = new List<IntPtr>();
+		private Dictionary<IntPtr, string> m_winText = new Dictionary<IntPtr, string>();
+		private List<IntPtr> m_windowsBackToTop = new List<IntPtr>();
+		private string name = null;
+		
+		private Snapshot(bool userInitiated, string name)
+		{
+			this.name = name;
+			EnumWindows(EvalWindow, 0);
 
-        private Snapshot(bool userInitiated) {
-            EnumWindows(EvalWindow, 0);
+			TimeTaken = DateTime.UtcNow;
+			UserInitiated = userInitiated;
 
-            TimeTaken = DateTime.UtcNow;
-            UserInitiated = userInitiated;
+			var pixels = new List<long>();
+			foreach (var screen in Screen.AllScreens)
+			{
+				pixels.Add(screen.Bounds.Width * screen.Bounds.Height);
+			}
+			MonitorPixelCounts = pixels.ToArray();
+			NumMonitors = pixels.Count;
+		}
+		private Snapshot(string str)
+		{
+			string[] strList = str.Split(new string[] { "|||" }, StringSplitOptions.None);
+			this.name = strList[0];
+			NumMonitors = Convert.ToInt32(strList[1]);
+			UserInitiated = Convert.ToBoolean(strList[2]);
 
-            var pixels = new List<long>();
-            foreach (var screen in Screen.AllScreens) {
-                pixels.Add(screen.Bounds.Width * screen.Bounds.Height);
-            }
-            MonitorPixelCounts = pixels.ToArray();
-            NumMonitors = pixels.Count;
+			string[] sTemp = strList[3].Split(new string[] { "###" }, StringSplitOptions.None);
+			var pixels = new List<long>();
+			foreach (var s in sTemp)
+			{
+				if (!s.Equals(""))
+				{
+					pixels.Add(Convert.ToInt64(s));
+				}
+			}
+			MonitorPixelCounts = pixels.ToArray();
+
+			sTemp = strList[4].Split(new string[] { "###" }, StringSplitOptions.None);
+			foreach (var s in sTemp)
+			{
+				if (!s.Equals(""))
+				{
+					m_windowsBackToTop.Add(new IntPtr(Convert.ToInt32(s)));
+				}
+			}
+
+			sTemp = strList[5].Split(new string[] { "###" }, StringSplitOptions.None);
+			foreach (var s in sTemp)
+			{
+				if (!s.Equals(""))
+				{
+					string[] sTemp2 = s.Split(new string[] { "~~~" }, StringSplitOptions.None);
+					m_winText.Add(new IntPtr(Convert.ToInt32(sTemp2[0])), sTemp2[1]);
+				}
+			}
+
+			sTemp = strList[6].Split(new string[] { "###" }, StringSplitOptions.None);
+			foreach (var s in sTemp)
+			{
+				if (!s.Equals(""))
+				{
+					string[] sTemp2 = s.Split(new string[] { "~~~" }, StringSplitOptions.None);
+					string[] minXY = sTemp2[4].Split(',');
+					string[] maxXY = sTemp2[5].Split(',');
+					string[] rectDim = sTemp2[6].Split(',');
+					RECT tempRect = new RECT();
+					tempRect.Left = Convert.ToInt32(rectDim[0]);
+					tempRect.Top = Convert.ToInt32(rectDim[1]);
+					tempRect.Right = Convert.ToInt32(rectDim[2]);
+					tempRect.Bottom = Convert.ToInt32(rectDim[3]);
+
+					WINDOWPLACEMENT tempPlacement = new WINDOWPLACEMENT();
+					tempPlacement.length = Convert.ToInt32(sTemp2[1]);
+					tempPlacement.flags = Convert.ToInt32(sTemp2[2]);
+					tempPlacement.showCmd = Convert.ToInt32(sTemp2[3]);
+					tempPlacement.ptMinPosition = new Point(Convert.ToInt32(minXY[0]), Convert.ToInt32(minXY[1]));
+					tempPlacement.ptMaxPosition = new Point(Convert.ToInt32(maxXY[0]), Convert.ToInt32(maxXY[1]));
+					tempPlacement.rcNormalPosition = tempRect;
+
+					m_placements.Add(new IntPtr(Convert.ToInt32(sTemp2[0])), tempPlacement);
+				}
+			}
+		}
+		internal static Snapshot TakeSnapshot(bool userInitiated) {
+            return new Snapshot(userInitiated, null);
         }
+		internal static Snapshot TakeSnapshot(string name)
+		{
+			return new Snapshot(true, name);
+		}
+		internal static Snapshot LoadSnapshot(string info)
+		{
+			return new Snapshot(info);
+		}
+		public string ConvertToString()
+		{
+			string s = "";
+			s += (name == null ? "" : name) + "|||";
+			s += (NumMonitors == 0 ? "" : NumMonitors.ToString()) + "|||";
+			s += UserInitiated + "|||";
 
-        internal static Snapshot TakeSnapshot(bool userInitiated) {
-            return new Snapshot(userInitiated);
-        }
+			for (int i = 0; i < MonitorPixelCounts.Length; i++)
+			{
+				s += MonitorPixelCounts[i] + "###";
+			}
+			s += "|||";
+			
+			foreach (var ptr in m_windowsBackToTop)
+			{
+				s += ptr + "###";
+			}
+			s += "|||";
 
-        private bool EvalWindow(int hwndInt, int lParam) {
+			foreach (var ptr in m_winText.Keys)
+			{
+				s += ptr + "~~~" + m_winText[ptr]+ "###";
+			}
+			s += "|||";
+
+
+			foreach (var ptr in m_placements.Keys)
+			{
+				s += ptr + "~~~";
+				WINDOWPLACEMENT a = m_placements[ptr];
+				s += a.length + "~~~";
+				s += a.flags + "~~~";
+				s += a.showCmd + "~~~";
+				s += a.ptMinPosition.X + "," + a.ptMinPosition.Y + "~~~";
+				s += a.ptMaxPosition.X + "," + a.ptMinPosition.Y + "~~~";
+				s += a.rcNormalPosition.Left + "," + a.rcNormalPosition.Top + "," + a.rcNormalPosition.Right + "," + a.rcNormalPosition.Bottom + "###";
+			}
+			s += "|||";
+
+			return s;
+		}
+		private bool EvalWindow(int hwndInt, int lParam) {
             var hwnd = new IntPtr(hwndInt);
 
             if (!IsAltTabWindow(hwnd)) {
@@ -47,10 +163,10 @@ namespace WindowsLayoutSnapshot {
                 throw new Exception("Error getting window placement");
             }
             m_placements.Add(hwnd, placement);
+			m_winText.Add(hwnd, GetWindowText(hwnd)); 
 
-            return true;
+			return true;
         }
-
         internal DateTime TimeTaken { get; private set; }
         internal bool UserInitiated { get; private set; }
         internal long[] MonitorPixelCounts { get; private set; }
@@ -60,7 +176,11 @@ namespace WindowsLayoutSnapshot {
             get { return DateTime.UtcNow.Subtract(TimeTaken); }
         }
 
-        internal void RestoreAndPreserveMenu(object sender, EventArgs e) { // ignore extra params
+		internal string Name {
+			get { return name; }
+		}
+
+		internal void RestoreAndPreserveMenu(object sender, EventArgs e) { // ignore extra params
             // We save and restore the current foreground window because it's our tray menu
             // I couldn't find a way to get this handle straight from the tray menu's properties;
             //   the ContextMenuStrip.Handle isn't the right one, so I'm using win32
@@ -84,13 +204,26 @@ namespace WindowsLayoutSnapshot {
                 // this might error out if the window no longer exists
                 var placementValue = placement.Value;
 
-                // make sure points and rects will be inside monitor
-                IntPtr extendedStyles = GetWindowLongPtr(placement.Key, (-20)); // GWL_EXSTYLE
+				// make sure points and rects will be inside monitor
+				IntPtr extendedStyles = GetWindowLongPtr(placement.Key, (-20)); // GWL_EXSTYLE
                 placementValue.ptMaxPosition = GetUpperLeftCornerOfNearestMonitor(extendedStyles, placementValue.ptMaxPosition);
                 placementValue.ptMinPosition = GetUpperLeftCornerOfNearestMonitor(extendedStyles, placementValue.ptMinPosition);
                 placementValue.rcNormalPosition = GetRectInsideNearestMonitor(extendedStyles, placementValue.rcNormalPosition);
 
-                SetWindowPlacement(placement.Key, ref placementValue);
+				if (SetWindowPlacement(placement.Key, ref placementValue) == false)
+				{
+					var winList = FindWindowsWithText(m_winText[placement.Key]);
+					foreach (var hWndInt in winList)
+					{
+						IntPtr temp = new IntPtr(hWndInt);
+						if (m_placements.ContainsKey(temp))
+						{
+							continue;
+						}
+						SetWindowPlacement(temp, ref placementValue);
+						break;
+					}
+				}
             }
 
             // now update the z-orders
@@ -103,7 +236,56 @@ namespace WindowsLayoutSnapshot {
             EndDeferWindowPos(positionStructure);
         }
 
-        private static Point GetUpperLeftCornerOfNearestMonitor(IntPtr windowExtendedStyles, Point point) {
+		/// <summary> Get the text for the window pointed to by hWnd </summary>
+		public static string GetWindowText(IntPtr hWnd)
+		{
+			int size = GetWindowTextLength(hWnd);
+			if (size > 0)
+			{
+				var builder = new StringBuilder(size + 1);
+				GetWindowText(hWnd, builder, builder.Capacity);
+				return builder.ToString();
+			}
+
+			return String.Empty;
+		}
+
+		
+		/// <summary> Find all windows that match the given filter </summary>
+		/// <param name="filter"> A delegate that returns true for windows
+		///    that should be returned and false for windows that should
+		///    not be returned </param>
+		private static IEnumerable<int> FindWindows(EnumWindowsProc filter)
+		{
+			List<int> windows = new List<int>();
+
+			EnumWindows(delegate (int wnd, int param)
+			{
+				if (filter(wnd, param))
+				{
+					// only add the windows that pass the filter
+					windows.Add(wnd);
+				}
+
+				// but return true here so that we iterate all windows
+				return true;
+			}, 0);
+
+			return windows;
+		}
+
+		/// <summary> Find all windows that contain the given title text </summary>
+		/// <param name="titleText"> The text that the window title must contain. </param>
+		public static IEnumerable<int> FindWindowsWithText(string titleText)
+		{
+			return FindWindows(delegate (int wnd, int param)
+			{
+				var hwnd = new IntPtr(wnd);
+				return GetWindowText(hwnd).Contains(titleText);
+			});
+		}
+
+		private static Point GetUpperLeftCornerOfNearestMonitor(IntPtr windowExtendedStyles, Point point) {
             if ((windowExtendedStyles.ToInt64() & 0x00000080) > 0) { // WS_EX_TOOLWINDOW
                 return Screen.GetBounds(point).Location; // use screen coordinates
             } else {
@@ -223,7 +405,13 @@ namespace WindowsLayoutSnapshot {
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
 
-        [StructLayout(LayoutKind.Sequential)]
+		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+		private static extern int GetWindowText(IntPtr hWnd, StringBuilder strText, int maxCount);
+
+		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+		private static extern int GetWindowTextLength(IntPtr hWnd);
+		[StructLayout(LayoutKind.Sequential)]
+
         private struct WINDOWPLACEMENT {
             public int length;
             public int flags;
