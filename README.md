@@ -12,3 +12,14 @@
 
 #### License
 This app and its source code are released into the public domain.
+
+From https://github.com/adamsmith/WindowsLayoutSnapshot/issues/8:
+Hi,
+
+I see this project is not maintained for years.
+
+But there are a lot of good forks, my suggestion is to select/create a new fork, and do all the changes from the other forks there.
+
+Then create a community and so on.
+
+See the forks here: https://techgaun.github.io/active-forks/index.html#https://github.com/adamsmith/WindowsLayoutSnapshot
